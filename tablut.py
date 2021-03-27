@@ -25,7 +25,7 @@ class MuZeroConfig:
         self.opponent = "self"  # Hard coded agent that MuZero faces to assess his progress in multiplayer games. It doesn't influence training. None, "random" or "expert" if implemented in the Game class
 
         ### Self-Play
-        self.num_workers = 8  # Number of simultaneous threads/workers self-playing to feed the replay buffer
+        self.num_workers = 1  # Number of simultaneous threads/workers self-playing to feed the replay buffer
         self.selfplay_on_gpu = False
         self.max_moves = 225  # Maximum number of moves if game is not finished before
         self.num_simulations = 25  # Number of future moves self-simulated
@@ -95,8 +95,6 @@ class MuZeroConfig:
         # Reanalyze (See paper appendix Reanalyse)
         self.use_last_model_value = True  # Use the last model to provide a fresher, stable n-step value (See paper appendix Reanalyze)
         self.reanalyse_on_gpu = False
-
-
 
         ### Adjust the self play / training ratio to avoid over/underfitting
         self.self_play_delay = 0  # Number of seconds to wait after each played game
@@ -279,6 +277,7 @@ class Game(AbstractGame):
 class AshtonTablut:
     def __init__(self):
         self.board = np.zeros((4, 9, 9), dtype=np.int8)
+        self.citadelMasks = np.zeros((9, 9, 9, 9), dtype=np.int8)
         self.player = -1 #-1: Bianco, 1: Nero
         self.drawQueue = []
         self.stepsWithoutCapturing = 0
@@ -326,7 +325,7 @@ class AshtonTablut:
         
         #Board[3]: Celle non calpestabili: citadels, trono 1 calpestabili 0
         #Rimozione di alcune citadels ((0,4), (4,0), (4,8), (8,4)): per evitare che il nero sia mangiato quando dentro alla citadels
-
+        
         self.board[3] = np.array([[0, 0, 0, 1, 0, 1, 0, 0, 0],
                                   [0, 0, 0, 0, 1, 0, 0, 0, 0],
                                   [0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -336,6 +335,101 @@ class AshtonTablut:
                                   [0, 0, 0, 0, 0, 0, 0, 0, 0],
                                   [0, 0, 0, 0, 1, 0, 0, 0, 0],
                                   [0, 0, 0, 1, 0, 1, 0, 0, 0]], dtype=np.int8)
+
+        #Maschere speciali per la verifica delle mosse attuabili dal nero
+
+        self.citadelMasks = np.zeros((9, 9, 9, 9), dtype=np.int8)
+
+        self.citadelMasks[:,:] = np.array([ [0, 0, 0, 1, 1, 1, 0, 0, 0],
+                                            [0, 0, 0, 0, 1, 0, 0, 0, 0],
+                                            [0, 0, 0, 0, 0, 0, 0, 0, 0],
+                                            [1, 0, 0, 0, 0, 0, 0, 0, 1],
+                                            [1, 1, 0, 0, 1, 0, 0, 1, 1],
+                                            [1, 0, 0, 0, 0, 0, 0, 0, 1],
+                                            [0, 0, 0, 0, 0, 0, 0, 0, 0],
+                                            [0, 0, 0, 0, 1, 0, 0, 0, 0],
+                                            [0, 0, 0, 1, 1, 1, 0, 0, 0]], dtype=np.int8)
+
+        self.citadelMasks[0,3:6] = np.array([[0, 0, 0, 0, 0, 0, 0, 0, 0],
+                                             [0, 0, 0, 0, 0, 0, 0, 0, 0],
+                                             [0, 0, 0, 0, 0, 0, 0, 0, 0],
+                                             [1, 0, 0, 0, 0, 0, 0, 0, 1],
+                                             [1, 1, 0, 0, 1, 0, 0, 1, 1],
+                                             [1, 0, 0, 0, 0, 0, 0, 0, 1],
+                                             [0, 0, 0, 0, 0, 0, 0, 0, 0],
+                                             [0, 0, 0, 0, 1, 0, 0, 0, 0],
+                                             [0, 0, 0, 1, 1, 1, 0, 0, 0]], dtype=np.int8)
+
+        self.citadelMasks[1,  4] = np.array([[0, 0, 0, 0, 0, 0, 0, 0, 0],
+                                             [0, 0, 0, 0, 0, 0, 0, 0, 0],
+                                             [0, 0, 0, 0, 0, 0, 0, 0, 0],
+                                             [1, 0, 0, 0, 0, 0, 0, 0, 1],
+                                             [1, 1, 0, 0, 1, 0, 0, 1, 1],
+                                             [1, 0, 0, 0, 0, 0, 0, 0, 1],
+                                             [0, 0, 0, 0, 0, 0, 0, 0, 0],
+                                             [0, 0, 0, 0, 1, 0, 0, 0, 0],
+                                             [0, 0, 0, 1, 1, 1, 0, 0, 0]], dtype=np.int8)    
+
+        self.citadelMasks[8,3:6] = np.array([[0, 0, 0, 1, 1, 1, 0, 0, 0],
+                                             [0, 0, 0, 0, 1, 0, 0, 0, 0],
+                                             [0, 0, 0, 0, 0, 0, 0, 0, 0],
+                                             [1, 0, 0, 0, 0, 0, 0, 0, 1],
+                                             [1, 1, 0, 0, 1, 0, 0, 1, 1],
+                                             [1, 0, 0, 0, 0, 0, 0, 0, 1],
+                                             [0, 0, 0, 0, 0, 0, 0, 0, 0],
+                                             [0, 0, 0, 0, 0, 0, 0, 0, 0],
+                                             [0, 0, 0, 0, 0, 0, 0, 0, 0]], dtype=np.int8)
+
+        self.citadelMasks[7,  4] = np.array([[0, 0, 0, 1, 1, 1, 0, 0, 0],
+                                             [0, 0, 0, 0, 1, 0, 0, 0, 0],
+                                             [0, 0, 0, 0, 0, 0, 0, 0, 0],
+                                             [1, 0, 0, 0, 0, 0, 0, 0, 1],
+                                             [1, 1, 0, 0, 1, 0, 0, 1, 1],
+                                             [1, 0, 0, 0, 0, 0, 0, 0, 1],
+                                             [0, 0, 0, 0, 0, 0, 0, 0, 0],
+                                             [0, 0, 0, 0, 0, 0, 0, 0, 0],
+                                             [0, 0, 0, 0, 0, 0, 0, 0, 0]], dtype=np.int8)     
+
+        self.citadelMasks[3:6,0] = np.array([[0, 0, 0, 1, 1, 1, 0, 0, 0],
+                                             [0, 0, 0, 0, 1, 0, 0, 0, 0],
+                                             [0, 0, 0, 0, 0, 0, 0, 0, 0],
+                                             [0, 0, 0, 0, 0, 0, 0, 0, 1],
+                                             [0, 0, 0, 0, 1, 0, 0, 1, 1],
+                                             [0, 0, 0, 0, 0, 0, 0, 0, 1],
+                                             [0, 0, 0, 0, 0, 0, 0, 0, 0],
+                                             [0, 0, 0, 0, 1, 0, 0, 0, 0],
+                                             [0, 0, 0, 1, 1, 1, 0, 0, 0]], dtype=np.int8)
+
+        self.citadelMasks[4,  1] = np.array([[0, 0, 0, 1, 1, 1, 0, 0, 0],
+                                             [0, 0, 0, 0, 1, 0, 0, 0, 0],
+                                             [0, 0, 0, 0, 0, 0, 0, 0, 0],
+                                             [0, 0, 0, 0, 0, 0, 0, 0, 1],
+                                             [0, 0, 0, 0, 1, 0, 0, 1, 1],
+                                             [0, 0, 0, 0, 0, 0, 0, 0, 1],
+                                             [0, 0, 0, 0, 0, 0, 0, 0, 0],
+                                             [0, 0, 0, 0, 1, 0, 0, 0, 0],
+                                             [0, 0, 0, 1, 1, 1, 0, 0, 0]], dtype=np.int8)  
+
+        self.citadelMasks[3:6,8] = np.array([[0, 0, 0, 1, 1, 1, 0, 0, 0],
+                                             [0, 0, 0, 0, 1, 0, 0, 0, 0],
+                                             [0, 0, 0, 0, 0, 0, 0, 0, 0],
+                                             [1, 0, 0, 0, 0, 0, 0, 0, 0],
+                                             [1, 1, 0, 0, 1, 0, 0, 0, 0],
+                                             [1, 0, 0, 0, 0, 0, 0, 0, 0],
+                                             [0, 0, 0, 0, 0, 0, 0, 0, 0],
+                                             [0, 0, 0, 0, 1, 0, 0, 0, 0],
+                                             [0, 0, 0, 1, 1, 1, 0, 0, 0]], dtype=np.int8)
+
+        self.citadelMasks[4,  7] = np.array([[0, 0, 0, 1, 1, 1, 0, 0, 0],
+                                             [0, 0, 0, 0, 1, 0, 0, 0, 0],
+                                             [0, 0, 0, 0, 0, 0, 0, 0, 0],
+                                             [1, 0, 0, 0, 0, 0, 0, 0, 0],
+                                             [1, 1, 0, 0, 1, 0, 0, 0, 0],
+                                             [1, 0, 0, 0, 0, 0, 0, 0, 0],
+                                             [0, 0, 0, 0, 0, 0, 0, 0, 0],
+                                             [0, 0, 0, 0, 1, 0, 0, 0, 0],
+                                             [0, 0, 0, 1, 1, 1, 0, 0, 0]], dtype=np.int8)
+                                     
 
         return self.get_observation()
 
@@ -373,7 +467,8 @@ class AshtonTablut:
         winCheck = self.have_winner() or len(self.legal_actions()) == 0
         done = winCheck or drawCheck
 
-        reward = 1 if winCheck else 0
+        reward = 100 if winCheck else 0
+        reward += eaten
 
         return self.get_observation(), reward, done
 
@@ -382,14 +477,66 @@ class AshtonTablut:
         return np.array([self.board[0], self.board[1], self.board[2], self.board[3], board_to_play], dtype=np.int8)
 
     def legal_actions(self):
+        if self.to_play() == 0:
+            return self.legal_actions_white()
+        else:
+            return self.legal_actions_black()
+
+    def legal_actions_black(self):
+        legal = []
+
+        #Creo una maschera: pedoni, re, cittadelle
+        preMask = self.board[0] | self.board[1] | self.board[2]
+        
+        #Seleziono i pedoni del giocatore
+        pedoni = np.where(self.board[1] == 1)
+        
+        for y,x in zip(pedoni[0], pedoni[1]):
+            #Seleziono le celle adiacenti (no diagonali)
+            #Appena incontro un'ostacolo mi fermo (no salti, nemmeno il trono)
+
+            #Casi specifici per la maschera delle citadels
+            mask = preMask | self.citadelMasks[y,x]
+                
+            #Su
+            for newY in reversed(range(y)):
+                if mask[newY,x] == 0:
+                    legal.append(coords_to_number(((y,x), (newY,x))))
+                else:
+                    break
+
+            #Giu
+            for newY in range(y+1,9):
+                if mask[newY,x] == 0:
+                    legal.append(coords_to_number(((y,x), (newY,x))))
+                else:
+                    break
+
+            #Sinistra
+            for newX in reversed(range(x)):
+                if mask[y,newX] == 0:
+                    legal.append(coords_to_number(((y,x), (y,newX))))
+                else:
+                    break
+
+            #Destra
+            for newX in range(x+1,9):
+                if mask[y,newX] == 0:
+                    legal.append(coords_to_number(((y,x), (y,newX))))
+                else:
+                    break
+
+        return legal
+
+    def legal_actions_white(self):
         legal = []
 
         #Creo una maschera: pedoni, re, cittadelle
         mask = self.board[0] | self.board[1] | self.board[2] | self.board[3]
         
         #Seleziono i pedoni del giocatore
-        pedoni = np.where(self.board[self.to_play()] == 1)
-
+        pedoni = np.where(self.board[0] == 1)
+        
         for y,x in zip(pedoni[0], pedoni[1]):
             #Seleziono le celle adiacenti (no diagonali)
             #Appena incontro un'ostacolo mi fermo (no salti, nemmeno il trono)
@@ -422,7 +569,43 @@ class AshtonTablut:
                 else:
                     break
 
+        #Mosse del Re
+        y,x = np.where(self.board[2] == 1)
+        y,x = int(y), int(x)
+        #Seleziono le celle adiacenti (no diagonali)
+        #Appena incontro un'ostacolo mi fermo (no salti, nemmeno il trono)
+
+        #Su
+        for newY in reversed(range(y)):
+            if mask[newY,x] == 0:
+                legal.append(coords_to_number(((y,x), (newY,x))))
+            else:
+                break
+
+        #Giu
+        for newY in range(y+1,9):
+            if mask[newY,x] == 0:
+                legal.append(coords_to_number(((y,x), (newY,x))))
+            else:
+                break
+
+        #Sinistra
+        for newX in reversed(range(x)):
+            if mask[y,newX] == 0:
+                legal.append(coords_to_number(((y,x), (y,newX))))
+            else:
+                break
+
+        #Destra
+        for newX in range(x+1,9):
+            if mask[y,newX] == 0:
+                legal.append(coords_to_number(((y,x), (y,newX))))
+            else:
+                break
+        
+
         return legal
+
 
     def check_black_eat(self, action):#Controllo se il nero mangia dei pedoni bianchi
         y,x = action[1]#Dove è finita la pedina nera che dovrà catturare uno o più pedoni bianchi?
@@ -438,19 +621,25 @@ class AshtonTablut:
         lookLeft = np.array([allies[y,x-2:x+1], enemies[y,x-2:x+1]])
         lookRight = np.array([allies[y,x:x+3], enemies[y,x:x+3]])
 
+        #print("LU: {0}, LD: {1}, LL: {2}, LR: {3}".format(lookUp, lookDown, lookLeft, lookRight))
+
         captureCheck = np.array([[1,0,1], [0,1,0]])
 
         if np.array_equal(lookUp, captureCheck):
-            self.board[1, y-1, x] = 0
+            #print("captured white: {0}".format((y-1,x)))
+            self.board[0, y-1, x] = 0
             captured +=1
         if np.array_equal(lookDown, captureCheck):
-            self.board[1, y+1, x] = 0
+            #print("captured white: {0}".format((y+1,x)))
+            self.board[0, y+1, x] = 0
             captured +=1
         if np.array_equal(lookLeft, captureCheck):
-            self.board[1, y, x-1] = 0
+            #print("captured white: {0}".format((y,x-1)))
+            self.board[0, y, x-1] = 0
             captured +=1
         if np.array_equal(lookRight, captureCheck):
-            self.board[1, y, x+1] = 0
+            #print("captured white: {0}".format((y,x+1)))
+            self.board[0, y, x+1] = 0
             captured +=1
 
         return captured
@@ -470,18 +659,22 @@ class AshtonTablut:
         lookLeft = np.array([allies[y,x-2:x+1], enemies[y,x-2:x+1]])
         lookRight = np.array([allies[y,x:x+3], enemies[y,x:x+3]])
 
-        captureCheck = np.array([[1,0,1], [0,1,0]])
+        captureCheck1 = np.array([[1,0,1], [0,1,0]])
 
-        if np.array_equal(lookUp, captureCheck):
+        if np.array_equal(lookUp, captureCheck1):
+            #print("captured black: {0}".format((y-1,x)))
             self.board[1, y-1, x] = 0
             captured +=1
-        if np.array_equal(lookDown, captureCheck):
+        if np.array_equal(lookDown, captureCheck1):
+            #print("captured black: {0}".format((y+1,x)))
             self.board[1, y+1, x] = 0
             captured +=1
-        if np.array_equal(lookLeft, captureCheck):
+        if np.array_equal(lookLeft, captureCheck1):
+            #print("captured black: {0}".format((y,x-1)))
             self.board[1, y, x-1] = 0
             captured +=1
-        if np.array_equal(lookRight, captureCheck):
+        if np.array_equal(lookRight, captureCheck1):
+            #print("captured black: {0}".format((y,x+1)))
             self.board[1, y, x+1] = 0
             captured +=1
 
