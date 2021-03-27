@@ -25,9 +25,9 @@ class MuZeroConfig:
         self.opponent = "self"  # Hard coded agent that MuZero faces to assess his progress in multiplayer games. It doesn't influence training. None, "random" or "expert" if implemented in the Game class
 
         ### Self-Play
-        self.num_workers = 1  # Number of simultaneous threads/workers self-playing to feed the replay buffer
+        self.num_workers = 8  # Number of simultaneous threads/workers self-playing to feed the replay buffer
         self.selfplay_on_gpu = False
-        self.max_moves = 225  # Maximum number of moves if game is not finished before
+        self.max_moves = 80  # Maximum number of moves if game is not finished before
         self.num_simulations = 25  # Number of future moves self-simulated
         self.discount = 1  # Chronological discount of the reward (1 for board games)
         self.temperature_threshold = None  # Number of moves before dropping the temperature given by visit_softmax_temperature_fn to 0 (ie selecting the best action). If None, visit_softmax_temperature_fn is used every time
@@ -63,12 +63,10 @@ class MuZeroConfig:
         self.fc_value_layers = []  # Define the hidden layers in the value network
         self.fc_policy_layers = []  # Define the hidden layers in the policy network
 
-
-
         ### Training
         self.results_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "../results", os.path.basename(__file__)[:-3], datetime.datetime.now().strftime("%Y-%m-%d--%H-%M-%S"))  # Path to store the model weights and TensorBoard logs
         self.save_model = True  # Save the checkpoint in results_path as model.checkpoint
-        self.training_steps = 1000  # Total number of training steps (ie weights update according to a batch)
+        self.training_steps = 500  # Total number of training steps (ie weights update according to a batch)
         self.batch_size = 64  # Number of parts of games to train on at each training step
         self.checkpoint_interval = 10  # Number of training steps before using the model for self-playing
         self.value_loss_weight = 0.25  # Scale the value loss to avoid overfitting of the value function, paper recommends 0.25 (See paper appendix Reanalyze)
@@ -83,11 +81,9 @@ class MuZeroConfig:
         self.lr_decay_rate = 1  # Set it to 1 to use a constant learning rate
         self.lr_decay_steps = 10000
 
-
-
         ### Replay Buffer
-        self.replay_buffer_size = 10000  # Number of self-play games to keep in the replay buffer
-        self.num_unroll_steps = 100  # Number of game moves to keep for every batch element
+        self.replay_buffer_size = 1000  # Number of self-play games to keep in the replay buffer
+        self.num_unroll_steps = 50  # Number of game moves to keep for every batch element
         self.td_steps = 20  # Number of steps in the future to take into account for calculating the target value
         self.PER = True  # Prioritized Replay (See paper appendix Training), select in priority the elements in the replay buffer which are unexpected for the network
         self.PER_alpha = 0.5  # How much prioritization is used, 0 corresponding to the uniform case, paper suggests 1
@@ -97,8 +93,8 @@ class MuZeroConfig:
         self.reanalyse_on_gpu = False
 
         ### Adjust the self play / training ratio to avoid over/underfitting
-        self.self_play_delay = 0  # Number of seconds to wait after each played game
-        self.training_delay = 0  # Number of seconds to wait after each training step
+        self.self_play_delay = 1  # Number of seconds to wait after each played game
+        self.training_delay = 1  # Number of seconds to wait after each training step
         self.ratio = None  # Desired training steps per self played step ratio. Equivalent to a synchronous version, training can take much longer. Set it to None to disable it
 
 
@@ -217,36 +213,36 @@ class Game(AbstractGame):
             try:
                 l = int(
                     input(
-                        f"Enter the start row (1,..,9) to play for the player {self.to_play()}: "
+                        f"Enter the start row (0,..,8) to play for the player {self.to_play()}: "
                     )
                 )
                 k = int(
                     input(
-                        f"Enter the start column (1,..,9) to play for the player {self.to_play()}: "
+                        f"Enter the start column (0,..,8) to play for the player {self.to_play()}: "
                     )
                 )
                 j = int(
                     input(
-                        f"Enter the end row (1,..,9) to play for the player {self.to_play()}: "
+                        f"Enter the end row (0,..,8) to play for the player {self.to_play()}: "
                     )
                 )
                 i = int(
                     input(
-                        f"Enter the end column (1,..,9) to play for the player {self.to_play()}: "
+                        f"Enter the end column (0,..,8) to play for the player {self.to_play()}: "
                     )
                 )
-                choice = coords_to_number(((l-1,k-1), (j-1,i-1)))
+                choice = coords_to_number(((l,k), (j,i)))
                 print("choice: {0}".format(choice))
                 if (
                     choice in self.legal_actions()
-                    and 1 <= l
-                    and 1 <= k
-                    and l <= 9
-                    and k <= 9
-                    and 1 <= j
-                    and 1 <= i
-                    and j <= 9
-                    and i <= 9
+                    and 0 <= l
+                    and 0 <= k
+                    and l <= 8
+                    and k <= 8
+                    and 0 <= j
+                    and 0 <= i
+                    and j <= 8
+                    and i <= 8
                 ):
                     break
             except KeyboardInterrupt:
@@ -439,6 +435,12 @@ class AshtonTablut:
 
         fromYX = action[0]
         toYX = action[1]
+
+        #Controllo se ho mosso il re
+        if self.to_play() == 0:
+            if self.board[2][fromYX] == 1:
+                playerBoard = self.board[2]
+
 
         tmp = playerBoard[fromYX]
         playerBoard[fromYX] = 0
