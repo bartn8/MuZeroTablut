@@ -12,28 +12,24 @@ class MuZeroConfig:
         # More information is available here: https://github.com/werner-duvaud/muzero-general/wiki/Hyperparameter-Optimization
 
         self.seed = 0  # Seed for numpy, torch and the game
-        self.max_num_gpus = 0  # Fix the maximum number of GPUs to use. It's usually faster to use a single GPU (set it to 1) if it has enough memory. None will use every GPUs available
-
-
+        self.max_num_gpus = None  # Fix the maximum number of GPUs to use. It's usually faster to use a single GPU (set it to 1) if it has enough memory. None will use every GPUs available
 
         ### Game
-        self.observation_shape = (3, 3, 3)  # Dimensions of the game observation, must be 3D (channel, height, width). For a 1D array, please reshape it to (1, 1, length of array)
-        self.action_space = list(range(9))  # Fixed list of all possible actions. You should only edit the length
+        self.observation_shape = (5, 9, 9)  # Dimensions of the game observation, must be 3D (channel, height, width). For a 1D array, please reshape it to (1, 1, length of array)
+        self.action_space = list(range(6561))  # Fixed list of all possible actions. You should only edit the length
         self.players = list(range(2))  # List of players. You should only edit the length
         self.stacked_observations = 0  # Number of previous observations and previous actions to add to the current observation
 
         # Evaluate
         self.muzero_player = 0  # Turn Muzero begins to play (0: MuZero plays first, 1: MuZero plays second)
-        self.opponent = "expert"  # Hard coded agent that MuZero faces to assess his progress in multiplayer games. It doesn't influence training. None, "random" or "expert" if implemented in the Game class
-
-
+        self.opponent = None  # Hard coded agent that MuZero faces to assess his progress in multiplayer games. It doesn't influence training. None, "random" or "expert" if implemented in the Game class
 
         ### Self-Play
-        self.num_workers = 1  # Number of simultaneous threads/workers self-playing to feed the replay buffer
+        self.num_workers = 4  # Number of simultaneous threads/workers self-playing to feed the replay buffer
         self.selfplay_on_gpu = False
-        self.max_moves = 9  # Maximum number of moves if game is not finished before
+        self.max_moves = 225  # Maximum number of moves if game is not finished before
         self.num_simulations = 25  # Number of future moves self-simulated
-        self.discount = 1  # Chronological discount of the reward
+        self.discount = 1  # Chronological discount of the reward (1 for board games)
         self.temperature_threshold = None  # Number of moves before dropping the temperature given by visit_softmax_temperature_fn to 0 (ie selecting the best action). If None, visit_softmax_temperature_fn is used every time
 
         # Root prior exploration noise
@@ -43,8 +39,6 @@ class MuZeroConfig:
         # UCB formula
         self.pb_c_base = 19652
         self.pb_c_init = 1.25
-
-
 
         ### Network
         self.network = "resnet"  # "resnet" / "fullyconnected"
@@ -92,8 +86,8 @@ class MuZeroConfig:
 
 
         ### Replay Buffer
-        self.replay_buffer_size = 3000  # Number of self-play games to keep in the replay buffer
-        self.num_unroll_steps = 20  # Number of game moves to keep for every batch element
+        self.replay_buffer_size = 10000  # Number of self-play games to keep in the replay buffer
+        self.num_unroll_steps = 100  # Number of game moves to keep for every batch element
         self.td_steps = 20  # Number of steps in the future to take into account for calculating the target value
         self.PER = True  # Prioritized Replay (See paper appendix Training), select in priority the elements in the replay buffer which are unexpected for the network
         self.PER_alpha = 0.5  # How much prioritization is used, 0 corresponding to the uniform case, paper suggests 1
@@ -118,7 +112,12 @@ class MuZeroConfig:
         Returns:
             Positive float.
         """
-        return 1
+        if trained_steps < 0.5 * self.training_steps:
+            return 1.0
+        elif trained_steps < 0.75 * self.training_steps:
+            return 0.5
+        else:
+            return 0.25
 
 #Conversione delle coordinate in numero:
 #(l,k)->(j,i) Rappresenta la mossa da effettuare nella board 9x9
@@ -288,7 +287,7 @@ class AshtonTablut:
         
         #Board[0]: Bianco altro 0
         self.board[0] = np.array([[0, 0, 0, 0, 0, 0, 0, 0, 0], 
-                                  [0, 0, 0, 0, 1, 0, 0, 0, 0], 
+                                  [0, 0, 0, 0, 0, 0, 0, 0, 0], 
                                   [0, 0, 0, 0, 1, 0, 0, 0, 0],
                                   [0, 0, 0, 0, 1, 0, 0, 0, 0],
                                   [0, 0, 1, 1, 0, 1, 1, 0, 0],
@@ -391,28 +390,28 @@ class AshtonTablut:
             #Su
             for newY in reversed(range(y)):
                 if mask[newY,x] == 0:
-                    legal.append(coords_to_number(tuple((y,x), (newY,x))))
+                    legal.append(coords_to_number(((y,x), (newY,x))))
                 else:
                     break
 
             #Giu
             for newY in range(y,9):
                 if mask[newY,x] == 0:
-                    legal.append(coords_to_number(tuple((y,x), (newY,x))))
+                    legal.append(coords_to_number(((y,x), (newY,x))))
                 else:
                     break
 
             #Sinistra
             for newX in reversed(range(x)):
                 if mask[y,newX] == 0:
-                    legal.append(coords_to_number(tuple((y,x), (y,newX))))
+                    legal.append(coords_to_number(((y,x), (y,newX))))
                 else:
                     break
 
             #Destra
             for newX in range(x,9):
                 if mask[y,newX] == 0:
-                    legal.append(coords_to_number(tuple((y,x), (y,newX))))
+                    legal.append(coords_to_number(((y,x), (y,newX))))
                 else:
                     break
 
@@ -427,23 +426,23 @@ class AshtonTablut:
         enemies = self.board[0]
 
         #Seleziono le quattro terne di controllo
-        lookUp = (allies[y-2:y+1,x], enemies[y-2:y+1,x])
-        lookDown = (allies[y:y+3,x], enemies[y:y+3,x])
-        lookLeft = (allies[y,x-2:x+1], enemies[y,x-2:x+1])
-        lookRight = (allies[y,x:x+3], enemies[y,x:x+3])
+        lookUp = np.array([allies[y-2:y+1,x], enemies[y-2:y+1,x]])
+        lookDown = np.array([allies[y:y+3,x], enemies[y:y+3,x]])
+        lookLeft = np.array([allies[y,x-2:x+1], enemies[y,x-2:x+1]])
+        lookRight = np.array([allies[y,x:x+3], enemies[y,x:x+3]])
 
-        captureCheck = ((1,0,1),(0,1,0))
+        captureCheck = np.array([[1,0,1], [0,1,0]])
 
-        if lookUp == captureCheck:
+        if np.array_equal(lookUp, captureCheck):
             self.board[1, y-1, x] = 0
             captured +=1
-        if lookDown == captureCheck:
+        if np.array_equal(lookDown, captureCheck):
             self.board[1, y+1, x] = 0
             captured +=1
-        if lookLeft == captureCheck:
+        if np.array_equal(lookLeft, captureCheck):
             self.board[1, y, x-1] = 0
             captured +=1
-        if lookRight == captureCheck:
+        if np.array_equal(lookRight, captureCheck):
             self.board[1, y, x+1] = 0
             captured +=1
 
@@ -459,23 +458,23 @@ class AshtonTablut:
         enemies = self.board[1]
 
         #Seleziono le quattro terne di controllo
-        lookUp = (allies[y-2:y+1,x], enemies[y-2:y+1,x])
-        lookDown = (allies[y:y+3,x], enemies[y:y+3,x])
-        lookLeft = (allies[y,x-2:x+1], enemies[y,x-2:x+1])
-        lookRight = (allies[y,x:x+3], enemies[y,x:x+3])
+        lookUp = np.array([allies[y-2:y+1,x], enemies[y-2:y+1,x]])
+        lookDown = np.array([allies[y:y+3,x], enemies[y:y+3,x]])
+        lookLeft = np.array([allies[y,x-2:x+1], enemies[y,x-2:x+1]])
+        lookRight = np.array([allies[y,x:x+3], enemies[y,x:x+3]])
 
-        captureCheck = ((1,0,1),(0,1,0))
+        captureCheck = np.array([[1,0,1], [0,1,0]])
 
-        if lookUp == captureCheck:
+        if np.array_equal(lookUp, captureCheck):
             self.board[1, y-1, x] = 0
             captured +=1
-        if lookDown == captureCheck:
+        if np.array_equal(lookDown, captureCheck):
             self.board[1, y+1, x] = 0
             captured +=1
-        if lookLeft == captureCheck:
+        if np.array_equal(lookLeft, captureCheck):
             self.board[1, y, x-1] = 0
             captured +=1
-        if lookRight == captureCheck:
+        if np.array_equal(lookRight, captureCheck):
             self.board[1, y, x+1] = 0
             captured +=1
 
@@ -485,7 +484,7 @@ class AshtonTablut:
         #Controllo se ho un certo numero di stati ripetuti
         trovati = 0
         for state in self.drawQueue:
-            if state == self.board[:3]:
+            if np.array_equal(state, self.board[:3]):
                 trovati +=1
         
         if trovati > 0:
