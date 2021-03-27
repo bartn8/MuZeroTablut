@@ -22,10 +22,10 @@ class MuZeroConfig:
 
         # Evaluate
         self.muzero_player = 0  # Turn Muzero begins to play (0: MuZero plays first, 1: MuZero plays second)
-        self.opponent = None  # Hard coded agent that MuZero faces to assess his progress in multiplayer games. It doesn't influence training. None, "random" or "expert" if implemented in the Game class
+        self.opponent = "self"  # Hard coded agent that MuZero faces to assess his progress in multiplayer games. It doesn't influence training. None, "random" or "expert" if implemented in the Game class
 
         ### Self-Play
-        self.num_workers = 4  # Number of simultaneous threads/workers self-playing to feed the replay buffer
+        self.num_workers = 8  # Number of simultaneous threads/workers self-playing to feed the replay buffer
         self.selfplay_on_gpu = False
         self.max_moves = 225  # Maximum number of moves if game is not finished before
         self.num_simulations = 25  # Number of future moves self-simulated
@@ -133,7 +133,7 @@ class MuZeroConfig:
 
 def coords_to_number(coords):
     l,k = coords[0]
-    j,i = coords[0]
+    j,i = coords[1]
     return l*729 + k*81 + j*9 + i
 
 def number_to_coords(number):
@@ -237,7 +237,8 @@ class Game(AbstractGame):
                         f"Enter the end column (1,..,9) to play for the player {self.to_play()}: "
                     )
                 )
-                choice = coords_to_number(tuple((l-1,k-1), (j-1,i-1)))
+                choice = coords_to_number(((l-1,k-1), (j-1,i-1)))
+                print("choice: {0}".format(choice))
                 if (
                     choice in self.legal_actions()
                     and 1 <= l
@@ -250,9 +251,14 @@ class Game(AbstractGame):
                     and i <= 9
                 ):
                     break
-            except:
+            except KeyboardInterrupt:
+                exit(1)
+            except Exception:
                 pass
+
+
             print("Wrong input, try again")
+            print("legal actions: {0}".format(self.legal_actions()))
 
         return choice
 
@@ -272,7 +278,7 @@ class Game(AbstractGame):
 
 class AshtonTablut:
     def __init__(self):
-        self.board = np.zeros((3, 9, 9), dtype=np.int8)
+        self.board = np.zeros((4, 9, 9), dtype=np.int8)
         self.player = -1 #-1: Bianco, 1: Nero
         self.drawQueue = []
         self.stepsWithoutCapturing = 0
@@ -344,6 +350,8 @@ class AshtonTablut:
         playerBoard[fromYX] = 0
         playerBoard[toYX] = tmp
 
+        drawCheck = self.have_draw()
+
         eaten = 0
 
         #Controllo se mangio pedine
@@ -363,7 +371,6 @@ class AshtonTablut:
         self.player *= -1
 
         winCheck = self.have_winner() or len(self.legal_actions()) == 0
-        drawCheck = self.have_draw()
         done = winCheck or drawCheck
 
         reward = 1 if winCheck else 0
@@ -395,7 +402,7 @@ class AshtonTablut:
                     break
 
             #Giu
-            for newY in range(y,9):
+            for newY in range(y+1,9):
                 if mask[newY,x] == 0:
                     legal.append(coords_to_number(((y,x), (newY,x))))
                 else:
@@ -409,7 +416,7 @@ class AshtonTablut:
                     break
 
             #Destra
-            for newX in range(x,9):
+            for newX in range(x+1,9):
                 if mask[y,newX] == 0:
                     legal.append(coords_to_number(((y,x), (y,newX))))
                 else:
@@ -481,6 +488,8 @@ class AshtonTablut:
         return captured
 
     def have_draw(self):
+        if self.stepsWithoutCapturing < 10:
+            return False
         #Controllo se ho un certo numero di stati ripetuti
         trovati = 0
         for state in self.drawQueue:
@@ -542,4 +551,4 @@ class AshtonTablut:
         return False
 
     def render(self):
-        print(-self.board[0]+self.board[1]-20*self.board[2]+self.board[3])
+        print(-self.board[0]+self.board[1]-20*self.board[2]+10*self.board[3])
