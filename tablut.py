@@ -120,6 +120,34 @@ class MuZeroConfig:
         """
         return 1
 
+#Conversione delle coordinate in numero:
+#(l,k)->(j,i) Rappresenta la mossa da effettuare nella board 9x9
+#Per convertire in numero: l*9^3+k*9^2+j*9^1+i*9^0
+#Per convertire in coordinate: Operazione di divisione e resti
+
+#Esempio
+#(1,0)->(0,0) => 1*9^3+0*9^2+0*9^1+0*9^0=729
+#729 // 9 = 81 (729 % 9 = 0 (i))
+#81 // 9 = 9 (81 % 9 = 0 (j))
+#9 // 9 = 1 (9 % 9 = 0 (k))
+#1 // 9 = 0 (1 % 9 = 1 (l))
+
+def coords_to_number(coords):
+    l,k = coords[0]
+    j,i = coords[0]
+    return l*729 + k*81 + j*9 + i
+
+def number_to_coords(number):
+    i = number % 9
+    number = number // 9
+    j = number % 9
+    number = number // 9
+    k = number % 9
+    number = number // 9
+    l = number % 9
+    number = number // 9
+
+    return ((l,k),(j,i))
 
 class Game(AbstractGame):
     """
@@ -190,39 +218,44 @@ class Game(AbstractGame):
         """
         while True:
             try:
-                row = int(
+                l = int(
                     input(
-                        f"Enter the row (1, 2 or 3) to play for the player {self.to_play()}: "
+                        f"Enter the start row (1,..,9) to play for the player {self.to_play()}: "
                     )
                 )
-                col = int(
+                k = int(
                     input(
-                        f"Enter the column (1, 2 or 3) to play for the player {self.to_play()}: "
+                        f"Enter the start column (1,..,9) to play for the player {self.to_play()}: "
                     )
                 )
-                choice = (row - 1) * 3 + (col - 1)
+                j = int(
+                    input(
+                        f"Enter the end row (1,..,9) to play for the player {self.to_play()}: "
+                    )
+                )
+                i = int(
+                    input(
+                        f"Enter the end column (1,..,9) to play for the player {self.to_play()}: "
+                    )
+                )
+                choice = coords_to_number(tuple((l-1,k-1), (j-1,i-1)))
                 if (
                     choice in self.legal_actions()
-                    and 1 <= row
-                    and 1 <= col
-                    and row <= 3
-                    and col <= 3
+                    and 1 <= l
+                    and 1 <= k
+                    and l <= 9
+                    and k <= 9
+                    and 1 <= j
+                    and 1 <= i
+                    and j <= 9
+                    and i <= 9
                 ):
                     break
             except:
                 pass
             print("Wrong input, try again")
+
         return choice
-
-    def expert_agent(self):
-        """
-        Hard coded agent that MuZero faces to assess his progress in multiplayer games.
-        It doesn't influence training
-
-        Returns:
-            Action as an integer to take in the current game state
-        """
-        return self.env.expert_action()
 
     def action_to_string(self, action_number):
         """
@@ -234,25 +267,24 @@ class Game(AbstractGame):
         Returns:
             String representing the action.
         """
-        row = action_number // 3 + 1
-        col = action_number % 3 + 1
-        return f"Play row {row}, column {col}"
+        coords = number_to_coords(action_number)
+        return f"{coords[0]} -> {coords[1]}"
 
-#Players: [0,1]: 0 is White, 1 is Black
 
 class AshtonTablut:
     def __init__(self):
         self.board = np.zeros((3, 9, 9), dtype=np.int8)
         self.player = -1 #-1: Bianco, 1: Nero
         self.drawQueue = []
+        self.stepsWithoutCapturing = 0
 
-    def to_play(self):
+    def to_play(self):#Players: [0,1]: 0 is White, 1 is Black
         return 0 if self.player == -1 else 1
 
     def reset(self):
         self.player = -1
         
-        self.board = np.zeros((3, 9, 9), dtype=np.int8)
+        self.board = np.zeros((4, 9, 9), dtype=np.int8)
         
         #Board[0]: Bianco altro 0
         self.board[0] = np.array([[0, 0, 0, 0, 0, 0, 0, 0, 0], 
@@ -288,19 +320,22 @@ class AshtonTablut:
                                   [0, 0, 0, 0, 0, 0, 0, 0, 0]], dtype=np.int8)
         
         #Board[3]: Celle non calpestabili: citadels, trono 1 calpestabili 0
-        self.board[3] = np.array([[0, 0, 0, 1, 1, 1, 0, 0, 0],
+        #Rimozione di alcune citadels ((0,4), (4,0), (4,8), (8,4)): per evitare che il nero sia mangiato quando dentro alla citadels
+
+        self.board[3] = np.array([[0, 0, 0, 1, 0, 1, 0, 0, 0],
                                   [0, 0, 0, 0, 1, 0, 0, 0, 0],
                                   [0, 0, 0, 0, 0, 0, 0, 0, 0],
                                   [1, 0, 0, 0, 0, 0, 0, 0, 1],
-                                  [1, 1, 0, 0, 1, 0, 0, 1, 1],
+                                  [0, 1, 0, 0, 1, 0, 0, 1, 0],
                                   [1, 0, 0, 0, 0, 0, 0, 0, 1],
                                   [0, 0, 0, 0, 0, 0, 0, 0, 0],
                                   [0, 0, 0, 0, 1, 0, 0, 0, 0],
-                                  [0, 0, 0, 1, 1, 1, 0, 0, 0]], dtype=np.int8)
+                                  [0, 0, 0, 1, 0, 1, 0, 0, 0]], dtype=np.int8)
 
         return self.get_observation()
 
     def step(self, action):
+        action = number_to_coords(action)
         playerBoard = self.board[self.to_play()]
 
         fromYX = action[0]
@@ -310,12 +345,26 @@ class AshtonTablut:
         playerBoard[fromYX] = 0
         playerBoard[toYX] = tmp
 
-        #TODO: Check mangiatura pedine
+        eaten = 0
+
+        #Controllo se mangio pedine
+        if self.to_play() == 0:
+            eaten = self.check_white_eat(action)
+        else:
+            eaten = self.check_black_eat(action)
+
+        #Controllo se non ho mangiato pedine
+        if eaten > 0:
+            self.stepsWithoutCapturing = 0
+            self.drawQueue = []
+        else:
+            self.stepsWithoutCapturing += 1
+            self.drawQueue.append(self.board[:3].copy())
 
         self.player *= -1
 
         winCheck = self.have_winner() or len(self.legal_actions()) == 0
-        drawCheck = False   #TODO: implementare
+        drawCheck = self.have_draw()
         done = winCheck or drawCheck
 
         reward = 1 if winCheck else 0
@@ -333,7 +382,7 @@ class AshtonTablut:
         mask = self.board[0] | self.board[1] | self.board[2] | self.board[3]
         
         #Seleziono i pedoni del giocatore
-        pedoni = np.where(self.board[1] == self.player)
+        pedoni = np.where(self.board[self.to_play()] == 1)
 
         for y,x in zip(pedoni[0], pedoni[1]):
             #Seleziono le celle adiacenti (no diagonali)
@@ -342,32 +391,95 @@ class AshtonTablut:
             #Su
             for newY in reversed(range(y)):
                 if mask[newY,x] == 0:
-                    legal.append(((y,x), (newY,x)))
+                    legal.append(coords_to_number(tuple((y,x), (newY,x))))
                 else:
                     break
 
             #Giu
             for newY in range(y,9):
                 if mask[newY,x] == 0:
-                    legal.append(((y,x), (newY,x)))
+                    legal.append(coords_to_number(tuple((y,x), (newY,x))))
                 else:
                     break
 
             #Sinistra
             for newX in reversed(range(x)):
                 if mask[y,newX] == 0:
-                    legal.append(((y,x), (y,newX)))
+                    legal.append(coords_to_number(tuple((y,x), (y,newX))))
                 else:
                     break
 
             #Destra
             for newX in range(x,9):
                 if mask[y,newX] == 0:
-                    legal.append(((y,x), (y,newX)))
+                    legal.append(coords_to_number(tuple((y,x), (y,newX))))
                 else:
                     break
 
         return legal
+
+    def check_black_eat(self, action):#Controllo se il nero mangia dei pedoni bianchi
+        y,x = action[1]#Dove è finita la pedina nera che dovrà catturare uno o più pedoni bianchi?
+        captured = 0
+
+        #Le citadels possono fare da spalla
+        allies = self.board[1] | self.board[3]
+        enemies = self.board[0]
+
+        #Seleziono le quattro terne di controllo
+        lookUp = (allies[y-2:y+1,x], enemies[y-2:y+1,x])
+        lookDown = (allies[y:y+3,x], enemies[y:y+3,x])
+        lookLeft = (allies[y,x-2:x+1], enemies[y,x-2:x+1])
+        lookRight = (allies[y,x:x+3], enemies[y,x:x+3])
+
+        captureCheck = ((1,0,1),(0,1,0))
+
+        if lookUp == captureCheck:
+            self.board[1, y-1, x] = 0
+            captured +=1
+        if lookDown == captureCheck:
+            self.board[1, y+1, x] = 0
+            captured +=1
+        if lookLeft == captureCheck:
+            self.board[1, y, x-1] = 0
+            captured +=1
+        if lookRight == captureCheck:
+            self.board[1, y, x+1] = 0
+            captured +=1
+
+        return captured
+
+    def check_white_eat(self, action):#Controllo se il bianco mangia dei pedoni neri
+        y,x = action[1]#Dove è finita la pedina bianca che dovrà catturare uno o più pedoni neri?
+        captured = 0
+
+        #Il re può fare da spalla
+        #Le citadels possono fare da spalla
+        allies = self.board[0] | self.board[2] | self.board[3]
+        enemies = self.board[1]
+
+        #Seleziono le quattro terne di controllo
+        lookUp = (allies[y-2:y+1,x], enemies[y-2:y+1,x])
+        lookDown = (allies[y:y+3,x], enemies[y:y+3,x])
+        lookLeft = (allies[y,x-2:x+1], enemies[y,x-2:x+1])
+        lookRight = (allies[y,x:x+3], enemies[y,x:x+3])
+
+        captureCheck = ((1,0,1),(0,1,0))
+
+        if lookUp == captureCheck:
+            self.board[1, y-1, x] = 0
+            captured +=1
+        if lookDown == captureCheck:
+            self.board[1, y+1, x] = 0
+            captured +=1
+        if lookLeft == captureCheck:
+            self.board[1, y, x-1] = 0
+            captured +=1
+        if lookRight == captureCheck:
+            self.board[1, y, x+1] = 0
+            captured +=1
+
+        return captured
 
     def have_draw(self):
         #Controllo se ho un certo numero di stati ripetuti
@@ -382,54 +494,53 @@ class AshtonTablut:
         return False
 
     def have_winner(self):
-        #Black Check
-
         #White Check
+        if self.white_win_check():
+            return True
 
+        #Black Check
+        if self.black_win_check():
+            return True
 
         return False
 
-    def expert_action(self):
-        board = self.board
-        action = np.random.choice(self.legal_actions())
-        # Horizontal and vertical checks
-        for i in range(3):
-            if abs(sum(board[i, :])) == 2:
-                ind = np.where(board[i, :] == 0)[0][0]
-                action = np.ravel_multi_index(
-                    (np.array([i]), np.array([ind])), (3, 3)
-                )[0]
-                if self.player * sum(board[i, :]) > 0:
-                    return action
+    def white_win_check(self):
+        #Controllo che il Re sia in un bordo della board
+        top = np.sum(self.board[2, 0])
+        down = np.sum(self.board[2, 8])
+        left = np.sum(self.board[2, :, 0])
+        right = np.sum(self.board[2, :, 8])
 
-            if abs(sum(board[:, i])) == 2:
-                ind = np.where(board[:, i] == 0)[0][0]
-                action = np.ravel_multi_index(
-                    (np.array([ind]), np.array([i])), (3, 3)
-                )[0]
-                if self.player * sum(board[:, i]) > 0:
-                    return action
+        return top == 1 or down == 1 or left == 1 or right == 1
 
-        # Diagonal checks
-        diag = board.diagonal()
-        anti_diag = np.fliplr(board).diagonal()
-        if abs(sum(diag)) == 2:
-            ind = np.where(diag == 0)[0][0]
-            action = np.ravel_multi_index(
-                (np.array([ind]), np.array([ind])), (3, 3)
-            )[0]
-            if self.player * sum(diag) > 0:
-                return action
+    def black_win_check(self):
+        #Controllo se il nero ha catturato il re
 
-        if abs(sum(anti_diag)) == 2:
-            ind = np.where(anti_diag == 0)[0][0]
-            action = np.ravel_multi_index(
-                (np.array([ind]), np.array([2 - ind])), (3, 3)
-            )[0]
-            if self.player * sum(anti_diag) > 0:
-                return action
+        #Se il re è sul trono allora 4
+        #Se il re è adiacente al trono allora 3 pedoni che lo circondano
+        #Altrimenti catturo come pedone normale (citadels possono fare da nemico)
 
-        return action
+        king = np.where(self.board[2] == 1)
+        
+        if king == (4,4):#Re sul trono. Controllo i bordi (3,4), (4,3), (4,5), (5,4)
+            if self.board[1, 3, 4] == 1 and self.board[1, 4, 3] == 1 and self.board[1, 4, 5] == 1 and self.board[1, 5, 4] == 1:
+                return True
+        
+        elif king in ((3,4), (4,3), (4,5), (5,4)):#Re adiacente al trono: controllo se sono presenti nemici intorno
+            #Aggiungo il trono alle pedine nemiche (in realtà aggiungo anche le citadels ma non influenzano)
+            enemies = self.board[1] | self.board[3]
+            y,x = king
+            if enemies[y-1, x] == 1 and enemies[y+1, x] == 1 and enemies[y, x-1] == 1 and enemies[y, x+1] == 1:
+                return True
+
+        else:#Check cattura normale.
+            #Aggiungo i contraints
+            enemies = self.board[1] | self.board[3]
+            y,x = king
+            if enemies[y-1, x] == 1 and enemies[y+1, x] == 1 or enemies[y, x-1] == 1 and enemies[y, x+1] == 1:
+                return True
+
+        return False
 
     def render(self):
-        print(self.board[::-1])
+        print(-self.board[0]+self.board[1]-20*self.board[2]+self.board[3])
